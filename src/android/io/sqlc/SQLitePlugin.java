@@ -11,9 +11,9 @@ import android.util.Log;
 import java.io.File;
 
 import java.lang.IllegalArgumentException;
+import java.lang.Number;
 
 import java.util.Map;
-
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -127,7 +127,7 @@ public class SQLitePlugin extends CordovaPlugin {
                 JSONArray txargs = allargs.getJSONArray("executes");
 
                 if (txargs.isNull(0)) {
-                    cbc.error("INTERNAL PLUGIN ERROR: missing executes list");
+                    cbc.error("missing executes list");
                 } else {
                     int len = txargs.length();
                     String[] queries = new String[len];
@@ -147,10 +147,10 @@ public class SQLitePlugin extends CordovaPlugin {
                             r.q.put(q);
                         } catch(Exception e) {
                             Log.e(SQLitePlugin.class.getSimpleName(), "couldn't add to queue", e);
-                            cbc.error("INTERNAL PLUGIN ERROR: couldn't add to queue");
+                            cbc.error("couldn't add to queue");
                         }
                     } else {
-                        cbc.error("INTERNAL PLUGIN ERROR: database not open");
+                        cbc.error("database not open");
                     }
                 }
                 break;
@@ -174,7 +174,7 @@ public class SQLitePlugin extends CordovaPlugin {
                 // stop the db runner thread:
                 r.q.put(new DBQuery());
             } catch(Exception e) {
-                Log.e(SQLitePlugin.class.getSimpleName(), "INTERNAL PLUGIN CLEANUP ERROR: could not stop db thread due to exception", e);
+                Log.e(SQLitePlugin.class.getSimpleName(), "couldn't stop db thread", e);
             }
             dbrmap.remove(dbname);
         }
@@ -241,46 +241,60 @@ public class SQLitePlugin extends CordovaPlugin {
         // IMPLEMENTATION based on various sources:
         InputStream in = null;
         OutputStream out = null;
+        
+        /*
+     ** Different path variations for Cordova/Ionic, Capacitor
+     ** Capacitor writes the source to the public/assets path, but
+     ** some have an old code which copies the dataabse to the root: 'public'.
+     ** So we check for all different versions
+     */
+     
+        String[] pathArray = {"www/", "www/assets/", "public/", "public/assets/"};
 
-        try {
-            in = this.cordova.getActivity().getAssets().open("www/" + myDBName);
-            String dbPath = dbfile.getAbsolutePath();
-            dbPath = dbPath.substring(0, dbPath.lastIndexOf("/") + 1);
+        for (String resourcePath : pathArray) {
 
-            File dbPathFile = new File(dbPath);
-            if (!dbPathFile.exists())
-                dbPathFile.mkdirs();
+            try {
+                in = this.cordova.getActivity().getAssets().open(resourcePath + myDBName);
+                String dbPath = dbfile.getAbsolutePath();
+                dbPath = dbPath.substring(0, dbPath.lastIndexOf("/") + 1);
 
-            File newDbFile = new File(dbPath + myDBName);
-            out = new FileOutputStream(newDbFile);
+                File dbPathFile = new File(dbPath);
+                if (!dbPathFile.exists())
+                    dbPathFile.mkdirs();
 
-            // XXX TODO: this is very primitive, other alternatives at:
-            // http://www.journaldev.com/861/4-ways-to-copy-file-in-java
-            byte[] buf = new byte[1024];
-            int len;
-            while ((len = in.read(buf)) > 0)
-                out.write(buf, 0, len);
-    
-            Log.v("info", "Copied prepopulated DB content to: " + newDbFile.getAbsolutePath());
-        } catch (IOException e) {
-            Log.v("createFromResource", "No prepopulated DB found, Error=" + e.getMessage());
-        } finally {
-            if (in != null) {
-                try {
-                    in.close();
-                } catch (IOException ignored) {
-                    Log.v("info", "Error closing input DB file, ignored");
+                File newDbFile = new File(dbPath + myDBName);
+                out = new FileOutputStream(newDbFile);
+
+                // XXX TODO: this is very primitive, other alternatives at:
+                // http://www.journaldev.com/861/4-ways-to-copy-file-in-java
+                byte[] buf = new byte[1024];
+                int len;
+                while ((len = in.read(buf)) > 0)
+                    out.write(buf, 0, len);
+
+                Log.v("info", "Copied prepopulated DB content from " + resourcePath + " to: " + newDbFile.getAbsolutePath());
+            } catch (IOException e) {
+                Log.v("createFromResource", "No prepopulated DB found in path " + resourcePath + ", Error=" + e.getMessage());
+            } finally {
+                if (in != null) {
+                    try {
+                        in.close();
+                    } catch (IOException ignored) {
+                        Log.v("info", "Error closing input DB file, ignored");
+                    }
+                }
+
+                if (out != null) {
+                    try {
+                        out.close();
+                    } catch (IOException ignored) {
+                        Log.v("info", "Error closing output DB file, ignored");
+                    }
                 }
             }
-    
-            if (out != null) {
-                try {
-                    out.close();
-                } catch (IOException ignored) {
-                    Log.v("info", "Error closing output DB file, ignored");
-                }
-            }
+
         }
+
     }
 
     /**
@@ -432,7 +446,7 @@ public class SQLitePlugin extends CordovaPlugin {
                             Log.e(SQLitePlugin.class.getSimpleName(), "couldn't delete database", e);
                             dbq.cbc.error("couldn't delete database: " + e);
                         }
-                    }
+                    }                    
                 } catch (Exception e) {
                     Log.e(SQLitePlugin.class.getSimpleName(), "couldn't close database", e);
                     if (dbq.cbc != null) {
