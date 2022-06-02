@@ -14,7 +14,6 @@
 
 #import "sqlite3_base64.h"
 
-#import "PSPDFThreadSafeMutableDictionary.h"
 
 // Defines Macro to only log lines when in DEBUG mode
 #ifdef DEBUG
@@ -27,6 +26,13 @@
 #   error "Missing objc_arc feature"
 #endif
 
+// CustomPSPDFThreadSafeMutableDictionary interface copied from
+// CustomPSPDFThreadSafeMutableDictionary.m:
+//
+// Dictionary-Subclasss whose primitive operations are thread safe.
+@interface CustomPSPDFThreadSafeMutableDictionary : NSMutableDictionary
+@end
+
 @implementation SQLitePlugin
 
 @synthesize openDBs;
@@ -37,7 +43,7 @@
     DLog(@"Initializing SQLitePlugin");
 
     {
-        openDBs = [PSPDFThreadSafeMutableDictionary dictionaryWithCapacity:0];
+        openDBs = [CustomPSPDFThreadSafeMutableDictionary dictionaryWithCapacity:0];
         appDBPaths = [NSMutableDictionary dictionaryWithCapacity:0];
 
         NSString *docs = [NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES) objectAtIndex: 0];
@@ -52,8 +58,7 @@
         NSError *err;
         if ([[NSFileManager defaultManager] fileExistsAtPath: nosync])
         {
-            DLog(@"no cloud sync at path: %@", nosync);
-            [appDBPaths setObject: nosync forKey:@"nosync"];
+            DLog(@"no cloud sync directory already exists at path: %@", nosync);
         }
         else
         {
@@ -62,7 +67,8 @@
                 NSURL *nosyncURL = [ NSURL fileURLWithPath: nosync];
                 if (![nosyncURL setResourceValue: [NSNumber numberWithBool: YES] forKey: NSURLIsExcludedFromBackupKey error: &err])
                 {
-                    DLog(@"IGNORED: error setting nobackup flag in LocalDatabase directory: %@", err);
+                    NSLog(@"INTERNAL PLUGIN ERROR: error setting nobackup flag in LocalDatabase directory: %@", err);
+                    return;                
                 }
                 DLog(@"no cloud sync at path: %@", nosync);
                 [appDBPaths setObject: nosync forKey:@"nosync"];
